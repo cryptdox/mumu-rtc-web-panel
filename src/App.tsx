@@ -13,7 +13,10 @@ import Usage from "@/pages/app/Usage";
 import Webhooks from "@/pages/app/Webhooks";
 import Events from "@/pages/app/Events";
 import Account from "@/pages/app/Account";
+import Billing from "@/pages/app/Billing";
+import Pricing from "@/pages/public/Pricing";
 import { AdminOverview, MediaNodes } from "@/pages/admin/Admin";
+import { AdminPlans, AdminRequests, AdminSubscriptions } from "@/pages/admin/Billing";
 
 export default function App() {
   return (
@@ -23,6 +26,7 @@ export default function App() {
         <Route element={<PublicLayout />}>
           <Route index element={<Landing />} />
           <Route path="docs" element={<Docs />} />
+          <Route path="pricing" element={<Pricing />} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
           <Route path="forgot-password" element={<ForgotPassword />} />
@@ -42,6 +46,7 @@ export default function App() {
         >
           <Route index element={<Projects />} />
           <Route path="account" element={<Account />} />
+          <Route path="billing" element={<Billing />} />
           <Route path="projects/:projectId" element={<ProjectLayout />}>
             <Route index element={<ProjectOverview />} />
             <Route path="channels" element={<Channels />} />
@@ -65,6 +70,9 @@ export default function App() {
           <Route index element={<AdminOverview />} />
           <Route path="nodes" element={<MediaNodes />} />
           <Route path="projects" element={<Projects adminView />} />
+          <Route path="plans" element={<AdminPlans />} />
+          <Route path="subscriptions" element={<AdminSubscriptions />} />
+          <Route path="requests" element={<AdminRequests />} />
         </Route>
       </Routes>
     </BrowserRouter>

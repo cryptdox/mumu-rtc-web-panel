@@ -206,3 +206,116 @@ export interface ListParams {
   sortOrder?: "asc" | "desc";
   [key: string]: string | number | boolean | undefined;
 }
+
+// ── Plans & subscriptions ────────────────────────────────────────────────────
+
+export type PlanTier = "TRIAL" | "FREE" | "STARTER" | "GROWTH" | "BUSINESS" | "PRO" | "SCALE" | "ENTERPRISE";
+export type BillingCycle = "MONTHLY" | "YEARLY";
+
+/** Limits and price null = unlimited / custom ("contact us"). */
+export interface PlanLimits {
+  maxProjects: number | null;
+  maxChannelsPerProject: number | null;
+  maxConcurrentPeersPerChannel: number | null;
+  monthlyMinutes: number | null;
+  monthlyRecordingMinutes: number | null;
+}
+
+export interface Plan extends PlanLimits {
+  planDefinitionId: string;
+  tier: PlanTier;
+  billingCycle: BillingCycle;
+  price: number | null;
+  isActive: boolean;
+}
+
+export interface PlanLog {
+  planDefinitionLogId: string;
+  planDefinitionId: string;
+  action: "CREATED" | "UPDATED" | "ACTIVATED" | "DEACTIVATED";
+  changes: Record<string, unknown> | null;
+  performedByUserId: string | null;
+  createdAt: string;
+}
+
+export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+export interface SubscriptionRequest {
+  subscriptionRequestId: string;
+  userId: string;
+  planDefinitionId: string;
+  requestedPlan: Omit<Plan, "planDefinitionId"> | null;
+  isRenewal: boolean;
+  requestedCycleCount: number;
+  resolvedDurationDays: number | null;
+  calculatedPrice: number | null;
+  recurringPrice: number | null;
+  status: RequestStatus;
+  resolvedByUserId: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface SubscriptionOverview {
+  userId: string;
+  plan: Omit<Plan, "planDefinitionId"> & { planDefinitionId: string | null; expiresAt: string };
+  expiresAt: string;
+  isExpired: boolean;
+  calculatedPrice: number | null;
+  paidAmount: number | null;
+  period: { start: string; end: string };
+  usage: {
+    minutes: number;
+    videoMinutes: number;
+    audioMinutes: number;
+    recordingMinutes: number;
+    recordingStorageMb: number;
+    projects: number;
+  };
+  pendingRequest: SubscriptionRequest | null;
+}
+
+export interface UsagePeriod {
+  subscriptionUsageId: string;
+  periodStart: string;
+  periodEnd: string;
+  videoMinutes: number;
+  audioMinutes: number;
+  recordingMinutes: number;
+  recordingStorageMb: number;
+}
+
+export interface SubscriptionLog {
+  subscriptionLogId: string;
+  action: "ASSIGNED" | "REQUESTED" | "APPROVED" | "REJECTED" | "UPDATED";
+  fromSnapshot: { tier: PlanTier; billingCycle: BillingCycle } | null;
+  toSnapshot: { tier: PlanTier; billingCycle: BillingCycle } | null;
+  fromExpiresAt: string | null;
+  toExpiresAt: string | null;
+  performedByUserId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/** Row of the admin subscription list. */
+export interface SubscriptionRow {
+  userId: string;
+  planDefinitionId: string | null;
+  currentPlan: Omit<Plan, "planDefinitionId"> & { expiresAt: string };
+  expiresAt: string;
+  periodAnchor: string;
+  isExpired: boolean;
+  calculatedPrice: number | null;
+  paidAmount: number | null;
+  createdAt: string;
+}
+
+/** `errors` of a 402 response. */
+export interface PlanLimitDetails {
+  code: "PLAN_LIMIT" | "QUOTA_EXCEEDED" | "SUBSCRIPTION_EXPIRED";
+  tier?: PlanTier;
+  limit?: keyof PlanLimits;
+  allowed?: number;
+  current?: number;
+  resetsAt?: string;
+  expiresAt?: string;
+}

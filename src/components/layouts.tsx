@@ -24,6 +24,9 @@ export function PublicLayout() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
           <Logo />
           <nav className="flex items-center gap-1 text-sm">
+            <NavLink to="/pricing" className="rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+              Pricing
+            </NavLink>
             <NavLink to="/docs" className="rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
               Docs
             </NavLink>
@@ -118,19 +121,25 @@ function SideNav({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
 }
 
 export function ConsoleLayout({ area }: { area: "app" | "admin" }) {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, can, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
+  // Admin sections show only when the role grants them (the backend checks again).
+  const adminItems: (NavItem & { show?: boolean })[] = [
+    { to: "/admin", label: "Overview", end: true },
+    { to: "/admin/nodes", label: "Media nodes", show: can("RTC_MEDIA_NODE", "READ_ALL") },
+    { to: "/admin/projects", label: "All projects" },
+    { to: "/admin/subscriptions", label: "Subscriptions", show: can("RTC_SUBSCRIPTION", "READ_ALL") },
+    { to: "/admin/requests", label: "Plan requests", show: can("RTC_SUBSCRIPTION", "READ_ALL") },
+    { to: "/admin/plans", label: "Plans", show: can("RTC_PLAN", "READ_ALL") },
+  ];
   const items: NavItem[] =
     area === "admin"
-      ? [
-          { to: "/admin", label: "Overview", end: true },
-          { to: "/admin/nodes", label: "Media nodes" },
-          { to: "/admin/projects", label: "All projects" },
-        ]
+      ? adminItems.filter((i) => i.show !== false)
       : [
           { to: "/app", label: "Projects", end: true },
+          { to: "/app/billing", label: "Billing & plan" },
           { to: "/app/account", label: "Account" },
         ];
 

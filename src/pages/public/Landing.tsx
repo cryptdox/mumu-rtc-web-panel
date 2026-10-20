@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Button } from "@/components/ui";
+import { PricingSection } from "./Pricing";
 
 const features = [
   { title: "Video, voice & live", body: "One SDK for 1:1 calls, group rooms and live streams, routed through a scalable SFU." },
@@ -63,6 +64,8 @@ export default function Landing() {
           </ol>
         </div>
       </section>
+
+      <PricingSection />
 
       <section className="mx-auto max-w-6xl px-4 py-20 text-center">
         <h2 className="text-2xl font-semibold tracking-tight">Ready when you are</h2>

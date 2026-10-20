@@ -17,6 +17,8 @@ interface Session {
   user: SessionUser;
   /** From mumu-rtc-backend /api/me: holds RTC_PLATFORM:READ_ALL (mumu ADMIN role). */
   isPlatformAdmin?: boolean;
+  /** From /api/me: this client's permission strings, e.g. "MUMU-RTC:RTC_PROJECT:CREATE:API_ENDPOINT". */
+  permissions?: string[];
 }
 
 interface RtcMe {
@@ -79,7 +81,11 @@ setTokenHooks({
         body: { refreshToken: session.refreshToken },
       });
       // Don't resurrect a session that was logged out while refreshing.
-      if (current?.refreshToken === session.refreshToken) setSession({ ...session, accessToken });
+      if (current?.refreshToken === session.refreshToken) {
+        setSession({ ...current, accessToken });
+        // IAM rebuilds the permission cache on refresh — pick up role changes.
+        void refreshMe();
+      }
       return accessToken;
     } catch {
       if (current?.refreshToken === session.refreshToken) setSession(null);
@@ -91,28 +97,40 @@ setTokenHooks({
 /** Header identifying the IAM client+realm (cryptdox · mumu) for unauthenticated auth calls. */
 export const accessCodeHeader = () => ({ "x-cr-access-code": config.iamAccessCode });
 
-/** Ask mumu-rtc-backend whether the session's user is a platform admin. */
-async function refreshAdminFlag() {
+/** Load the caller's MUMU permissions and platform-admin flag from mumu-rtc-backend. */
+async function refreshMe() {
   const session = current;
   if (!session) return;
   try {
     const me = await api<RtcMe>("/api/me");
-    if (current?.accessToken === session.accessToken || current?.refreshToken === session.refreshToken) {
-      if (current && current.isPlatformAdmin !== me.isPlatformAdmin) setSession({ ...current, isPlatformAdmin: me.isPlatformAdmin });
+    if (!current || current.refreshToken !== session.refreshToken) return;
+    const samePerms = (current.permissions ?? []).join() === me.permissions.join();
+    if (current.isPlatformAdmin !== me.isPlatformAdmin || !samePerms) {
+      setSession({ ...current, isPlatformAdmin: me.isPlatformAdmin, permissions: me.permissions });
     }
   } catch {
-    // backend unreachable — keep the last known flag
+    // backend unreachable — keep the last known values
   }
 }
 
-// Role changes in IAM show up on the next app load.
-if (current) void refreshAdminFlag();
+// Role changes in IAM show up on app load and after every token refresh.
+if (current) void refreshMe();
+
+/** True when `permissions` grant `action` on `resource` (e.g. "RTC_PROJECT", "CREATE"). */
+export function hasPermission(permissions: string[] | undefined, resource: string, action: string) {
+  return (permissions ?? []).some((p) => {
+    const [, res, act] = p.split(":");
+    return res === resource && act === action;
+  });
+}
 
 // ── React binding ───────────────────────────────────────────────────────────
 
 interface AuthContextValue {
   user: SessionUser | null;
   isAdmin: boolean;
+  /** Does the user hold `action` on `resource`? Checked again by the backend; this only shapes the UI. */
+  can: (resource: string, action: string) => boolean;
   login: (input: { email: string; password: string; captchaToken: string }) => Promise<{ user: SessionUser; isPlatformAdmin: boolean }>;
   register: (input: { email: string; password: string; name?: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -133,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     queryClient.clear();
     setSession({ accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user });
-    await refreshAdminFlag();
+    await refreshMe();
     return { user: data.user, isPlatformAdmin: !!current?.isPlatformAdmin };
   }, []);
 
@@ -155,7 +173,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user: session?.user ?? null, isAdmin: !!session?.isPlatformAdmin, login, register, logout, updateUser }),
+    () => ({
+      user: session?.user ?? null,
+      isAdmin: !!session?.isPlatformAdmin,
+      can: (resource: string, action: string) => hasPermission(session?.permissions, resource, action),
+      login,
+      register,
+      logout,
+      updateUser,
+    }),
     [session, login, register, logout, updateUser],
   );
 

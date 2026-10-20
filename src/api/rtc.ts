@@ -9,12 +9,19 @@ import type {
   MediaStat,
   NodeStatus,
   Paginated,
+  Plan,
+  PlanLog,
   Project,
   ProjectWithSecret,
   RecordingJob,
   RtcRole,
   RtcSession,
   RtcToken,
+  SubscriptionLog,
+  SubscriptionOverview,
+  SubscriptionRequest,
+  SubscriptionRow,
+  UsagePeriod,
   UsageRecord,
   UsageSummary,
   UsageType,
@@ -28,7 +35,8 @@ const enc = encodeURIComponent;
 
 // ── Projects ────────────────────────────────────────────────────────────────
 export const projects = {
-  list: (q: ListParams) => api<Paginated<Project>>("/api/project", { query: q }),
+  /** scope "all" = every project (platform admins only). */
+  list: (q: ListParams & { scope?: "mine" | "all" }) => api<Paginated<Project>>("/api/project", { query: q }),
   get: (id: string) => api<Project>(`/api/project/${enc(id)}`),
   create: (body: { name: string; description?: string }) =>
     api<ProjectWithSecret>("/api/project", { method: "POST", body }),
@@ -115,4 +123,37 @@ export const nodes = {
   setStatus: (mediaNodeId: string, status: NodeStatus) =>
     api<MediaNode>(`/api/media-node/${enc(mediaNodeId)}`, { method: "PUT", body: { status } }),
   remove: (mediaNodeId: string) => api<void>(`/api/media-node/${enc(mediaNodeId)}`, { method: "DELETE" }),
+};
+
+// ── Plans ───────────────────────────────────────────────────────────────────
+export type PlanInput = Partial<Omit<Plan, "planDefinitionId" | "tier" | "billingCycle">>;
+export const plans = {
+  /** Public catalog — no login needed. */
+  listPublic: () => api<Plan[]>("/api/plan", { auth: false }),
+  listAll: () => api<Plan[]>("/api/plan/all"),
+  create: (body: Pick<Plan, "tier" | "billingCycle"> & PlanInput) => api<Plan>("/api/plan", { method: "POST", body }),
+  update: (id: string, body: PlanInput) => api<Plan>(`/api/plan/${enc(id)}`, { method: "PUT", body }),
+  logs: (id: string) => api<PlanLog[]>(`/api/plan/${enc(id)}/logs`),
+};
+
+// ── Subscription (the signed-in developer's own) ────────────────────────────
+export const subscription = {
+  me: () => api<SubscriptionOverview>("/api/subscription/me"),
+  usage: () => api<UsagePeriod[]>("/api/subscription/me/usage"),
+  history: () => api<SubscriptionLog[]>("/api/subscription/me/history"),
+  requests: () => api<SubscriptionRequest[]>("/api/subscription/me/requests"),
+  request: (planDefinitionId: string, count: number) =>
+    api<SubscriptionRequest>("/api/subscription/me/requests", { method: "POST", body: { planDefinitionId, count } }),
+};
+
+// ── Subscriptions (platform admin) ──────────────────────────────────────────
+export const subscriptionsAdmin = {
+  list: (q: ListParams & { tier?: string; expired?: boolean }) => api<Paginated<SubscriptionRow>>("/api/subscription", { query: q }),
+  requests: (q: ListParams & { status?: string }) => api<Paginated<SubscriptionRequest>>("/api/subscription/requests", { query: q }),
+  approve: (requestId: string) => api<SubscriptionOverview>(`/api/subscription/requests/${enc(requestId)}/approve`, { method: "POST" }),
+  reject: (requestId: string) => api<SubscriptionRequest>(`/api/subscription/requests/${enc(requestId)}/reject`, { method: "POST" }),
+  get: (userId: string) => api<SubscriptionOverview>(`/api/subscription/${enc(userId)}`),
+  history: (userId: string) => api<SubscriptionLog[]>(`/api/subscription/${enc(userId)}/history`),
+  assign: (userId: string, body: { planDefinitionId: string; count?: number; activeFrom?: string; activeTo?: string }) =>
+    api<SubscriptionOverview>(`/api/subscription/${enc(userId)}`, { method: "PUT", body }),
 };

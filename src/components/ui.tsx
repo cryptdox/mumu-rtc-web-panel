@@ -8,7 +8,8 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { errorMessage } from "@/lib/api";
+import { Link } from "react-router";
+import { errorMessage, planLimitOf } from "@/lib/api";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -71,8 +72,36 @@ export function Field({ label, hint, children, htmlFor }: { label: string; hint?
 
 export function Input({ label, hint, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { label?: string; hint?: ReactNode }) {
   const id = useId();
-  const input = <input id={id} {...rest} className={cx(fieldBase, width(className), className)} />;
+  const [reveal, setReveal] = useState(false);
+  const isPassword = rest.type === "password";
+  const input = isPassword ? (
+    // Password fields get a show/hide toggle.
+    <div className={cx("relative", width(className), className)}>
+      <input id={id} {...rest} type={reveal ? "text" : "password"} className={cx(fieldBase, "w-full pr-10")} />
+      <button
+        type="button"
+        onClick={() => setReveal((v) => !v)}
+        aria-label={reveal ? "Hide password" : "Show password"}
+        aria-pressed={reveal}
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+      >
+        <EyeIcon off={reveal} />
+      </button>
+    </div>
+  ) : (
+    <input id={id} {...rest} className={cx(fieldBase, width(className), className)} />
+  );
   return label ? <Field label={label} hint={hint} htmlFor={id}>{input}</Field> : input;
+}
+
+function EyeIcon({ off }: { off: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {off && <path d="M3 3l18 18" />}
+    </svg>
+  );
 }
 
 export function Textarea({ label, hint, className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement> & { label?: string; hint?: ReactNode }) {
@@ -204,8 +233,18 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
   if (!error) return null;
   return (
     <div role="alert" className="flex items-start justify-between gap-3 rounded-lg bg-red-50 px-3.5 py-2.5 text-sm text-red-800 ring-1 ring-red-200 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30">
-      <span>{errorMessage(error)}</span>
-      {onRetry && (
+      <span>
+        {errorMessage(error)}
+        {planLimitOf(error) && (
+          <>
+            {" "}
+            <Link to="/app/billing" className="font-medium underline">
+              {planLimitOf(error)!.code === "SUBSCRIPTION_EXPIRED" ? "Renew plan" : "Upgrade plan"} →
+            </Link>
+          </>
+        )}
+      </span>
+      {onRetry && !planLimitOf(error) && (
         <button onClick={onRetry} className="shrink-0 font-medium underline">
           Retry
         </button>

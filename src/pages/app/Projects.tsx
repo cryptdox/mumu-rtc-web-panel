@@ -4,15 +4,18 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { projects } from "@/api/rtc";
 import type { Project, ProjectWithSecret } from "@/api/types";
 import { formatDate } from "@/lib/format";
+import { useAuth } from "@/lib/auth";
 import { Button, Card, type Column, Empty, ErrorBox, Input, Loading, Modal, PageHeader, Pagination, SecretRevealModal, StatusBadge, Table, Textarea } from "@/components/ui";
 
 const LIMIT = 20;
 
 const ownerColumn: Column<Project> = { header: "Owner", cell: (p) => <code className="text-xs">{p.ownerUserId}</code> };
 
-/** Project list. Admins (master realm) see every project; developers see their own. */
+/** Project list: the caller's own projects, or every project in the admin view. */
 export default function Projects({ adminView = false }: { adminView?: boolean }) {
   const navigate = useNavigate();
+  const { can } = useAuth();
+  const canCreate = !adminView && can("RTC_PROJECT", "CREATE");
   const qc = useQueryClient();
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
@@ -20,8 +23,8 @@ export default function Projects({ adminView = false }: { adminView?: boolean })
   const [created, setCreated] = useState<ProjectWithSecret | null>(null);
 
   const query = useQuery({
-    queryKey: ["projects", { offset, search }],
-    queryFn: () => projects.list({ offset, limit: LIMIT, search: search || undefined }),
+    queryKey: ["projects", adminView ? "all" : "mine", { offset, search }],
+    queryFn: () => projects.list({ offset, limit: LIMIT, search: search || undefined, scope: adminView ? "all" : "mine" }),
     placeholderData: keepPreviousData,
   });
 
@@ -30,7 +33,7 @@ export default function Projects({ adminView = false }: { adminView?: boolean })
       <PageHeader
         title={adminView ? "All projects" : "Projects"}
         description={adminView ? "Every project on the platform." : "Each project is one app with its own API key, channels, usage and webhooks."}
-        actions={!adminView && <Button onClick={() => setCreating(true)}>New project</Button>}
+        actions={canCreate && <Button onClick={() => setCreating(true)}>New project</Button>}
       />
 
       <Card
@@ -54,7 +57,7 @@ export default function Projects({ adminView = false }: { adminView?: boolean })
           <Empty
             title={search ? "No matching projects" : "No projects yet"}
             description={!adminView && !search ? "Create a project to get your API key and start issuing tokens." : undefined}
-            action={!adminView && !search && <Button onClick={() => setCreating(true)}>Create project</Button>}
+            action={canCreate && !search && <Button onClick={() => setCreating(true)}>Create project</Button>}
           />
         ) : (
           query.data && (

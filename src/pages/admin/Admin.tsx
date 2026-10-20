@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { nodes, projects } from "@/api/rtc";
+import { nodes, projects, subscriptionsAdmin } from "@/api/rtc";
+import { useAuth } from "@/lib/auth";
 import type { MediaNode, NodeStatus } from "@/api/types";
 import { formatDate, formatNumber, timeAgo } from "@/lib/format";
 import { Badge, Button, Card, ConfirmModal, Empty, ErrorBox, Input, Loading, PageHeader, Pagination, Select, Stat, StatusBadge, Table } from "@/components/ui";
@@ -19,8 +20,14 @@ function useAllNodes() {
 }
 
 export function AdminOverview() {
+  const { can } = useAuth();
   const nodesQ = useAllNodes();
-  const projectsQ = useQuery({ queryKey: ["projects", { offset: 0, search: "" }], queryFn: () => projects.list({ limit: 20 }) });
+  const projectsQ = useQuery({ queryKey: ["projects", "all", { offset: 0, search: "" }], queryFn: () => projects.list({ limit: 20, scope: "all" }) });
+  const pendingQ = useQuery({
+    queryKey: ["subscription-requests", { status: "PENDING", offset: 0 }],
+    queryFn: () => subscriptionsAdmin.requests({ status: "PENDING", limit: 25, sortOrder: "asc" }),
+    enabled: can("RTC_SUBSCRIPTION", "READ_ALL"),
+  });
 
   const list = nodesQ.data?.items ?? [];
   const count = (s: NodeStatus) => list.filter((n) => n.status === s).length;
@@ -42,6 +49,13 @@ export function AdminOverview() {
         />
         <Stat label="Projects" value={projectsQ.isLoading ? "…" : (projectsQ.data?.total ?? 0)} hint={<Link to="/admin/projects" className="text-brand-600">View all →</Link>} />
       </div>
+      {!!pendingQ.data?.total && (
+        <div className="mt-4">
+          <Link to="/admin/requests" className="block rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/30">
+            {pendingQ.data.total} plan request{pendingQ.data.total === 1 ? "" : "s"} waiting for review →
+          </Link>
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card title="Regions">
@@ -86,6 +100,9 @@ export function AdminOverview() {
 
 export function MediaNodes() {
   const qc = useQueryClient();
+  const { can } = useAuth();
+  const canUpdate = can("RTC_MEDIA_NODE", "UPDATE");
+  const canDelete = can("RTC_MEDIA_NODE", "DELETE");
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<NodeStatus | "">("");
   const [region, setRegion] = useState("");
@@ -189,24 +206,26 @@ export function MediaNodes() {
                     className: "text-right whitespace-nowrap",
                     cell: (n) => (
                       <div className="flex justify-end gap-1">
-                        {n.status === "ACTIVE" && (
+                        {canUpdate && n.status === "ACTIVE" && (
                           <Button variant="ghost" size="sm" onClick={() => setPending({ node: n, action: "DRAINING" })}>
                             Drain
                           </Button>
                         )}
-                        {n.status !== "ACTIVE" && (
+                        {canUpdate && n.status !== "ACTIVE" && (
                           <Button variant="ghost" size="sm" onClick={() => setPending({ node: n, action: "ACTIVE" })}>
                             Activate
                           </Button>
                         )}
-                        {n.status !== "OFFLINE" && (
+                        {canUpdate && n.status !== "OFFLINE" && (
                           <Button variant="ghost" size="sm" className="text-red-600" onClick={() => setPending({ node: n, action: "OFFLINE" })}>
                             Offline
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" className="text-red-600" onClick={() => setPending({ node: n, action: "DELETE" })}>
-                          Remove
-                        </Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" className="text-red-600" onClick={() => setPending({ node: n, action: "DELETE" })}>
+                            Remove
+                          </Button>
+                        )}
                       </div>
                     ),
                   },

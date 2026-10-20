@@ -5,7 +5,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public errors?: { path: string; message: string }[],
+    /** Field errors (400) or plan-limit details (402). */
+    public errors?: { path: string; message: string }[] | Record<string, unknown>,
   ) {
     super(message);
   }
@@ -97,12 +98,23 @@ export const iam = <T>(path: string, opts?: RequestOptions) => request<T>(config
 /** Human-readable message for any thrown value. */
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 403 && /access denied|permissions not loaded/i.test(err.message)) {
+    if (err.status === 403 && /access denied/i.test(err.message)) {
       return "Your account doesn't have permission for this action. Ask a platform admin to grant the MUMU RTC role.";
     }
-    if (err.errors?.length) return `${err.message}: ${err.errors.map((e) => `${e.path} ${e.message}`).join("; ")}`;
+    if (err.status === 401 && /permissions not loaded/i.test(err.message)) {
+      return "Your permissions couldn't be loaded. Sign out and sign in again.";
+    }
+    if (err.status === 402) return err.message; // plan limit — ErrorBox adds the upgrade link
+    if (Array.isArray(err.errors) && err.errors.length) return `${err.message}: ${err.errors.map((e) => `${e.path} ${e.message}`).join("; ")}`;
     return err.message;
   }
   if (err instanceof TypeError) return "Network error — is the server reachable?";
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Plan-limit details when `err` is a 402 from the control plane. */
+export function planLimitOf(err: unknown): { code: string; limit?: string } | null {
+  if (!(err instanceof ApiError) || err.status !== 402) return null;
+  const e = (err.errors && !Array.isArray(err.errors) ? err.errors : {}) as { code?: string; limit?: string };
+  return { code: e.code ?? "PLAN_LIMIT", limit: e.limit };
 }
